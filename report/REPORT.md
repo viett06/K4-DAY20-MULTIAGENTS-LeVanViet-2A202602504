@@ -6,32 +6,32 @@
 |---|---|---|
 | Le Van Viet | 2A202602504 | Cài đặt harness, chạy thí nghiệm, phân tích và báo cáo |
 
-- Mô hình: OpenRouter `AZURE_OPENAI_ENDPOINT=https://openrouter.ai/api/v1`, `AZURE_OPENAI_DEPLOYMENT_MODEL=meta/muse-spark-1.3`, `LAB_TEMPERATURE=0`, `recursion_limit=60`.
+- Mô hình: Google Gemini qua LangChain provider `LAB_MODEL=google_genai:gemini-3.1-flash-lite`, `LAB_TEMPERATURE=0`.
 - Deep Agents: `0.7.21`; hệ điều hành: macOS; chạy trực tiếp trong virtualenv.
-- Số lần chạy tác vụ đã dùng / ngân sách: đã chạy 3 baseline learning tasks và 1 subagents run; OpenRouter free tier hết quota ngày (`free-models-per-day`, remaining 0) trước khi hoàn tất pipeline.
-- Commit của tag `freeze`: chưa tạo.
+- `recursion_limit=30` cho các lần chạy chính thức.
+- Commit giả thuyết: `afffa8c`; tag `freeze`: `e265e8e`.
 
 ## 2. Giả thuyết
 
-- H1 (subagents so với baseline): `subagents` có thể tăng điểm ở tác vụ phức tạp nếu tác tử chính giao việc đủ ngữ cảnh cho `explorer` hoặc `reviewer`, nhưng token và thời gian sẽ tăng. Nếu tác tử chính không gọi subagent hoặc giao thiếu luật, điểm có thể không hơn `baseline`.
-- H2 (skills-auto so với baseline): `skills-auto` có khả năng cải thiện các lỗi quy trình lặp lại, đặc biệt lỗi bỏ sót quy ước Acme hoặc thiếu bước kiểm chứng, nhưng lợi ích trên tác vụ đánh giá có thể thấp vì skill do model sinh dễ quá khớp với phản hồi tác vụ học.
-- H3 (tác vụ học so với tác vụ đánh giá): điểm trên tác vụ học dự kiến cao hơn tác vụ đánh giá sau khi dùng skill, vì skill được tạo từ lỗi của learning set; chênh lệch lớn giữa learn và eval sẽ là dấu hiệu quá khớp hoặc thiếu tổng quát.
+- H1: `subagents` có thể tăng điểm ở tác vụ phức tạp nếu tác tử chính giao việc đủ ngữ cảnh cho `explorer` hoặc `reviewer`, nhưng token và thời gian sẽ tăng. Nếu tác tử chính không gọi subagent hoặc giao thiếu luật, điểm có thể không hơn `baseline`.
+- H2: `skills-auto` có khả năng cải thiện lỗi quy trình lặp lại, đặc biệt lỗi bỏ sót quy ước Acme hoặc thiếu bước kiểm chứng, nhưng lợi ích trên eval có thể thấp nếu skill không được đọc hoặc quá khớp learning set.
+- H3: điểm trên learning set dự kiến cao hơn eval sau khi dùng skill, vì skill được tạo từ lỗi learning set; chênh lệch lớn giữa learn và eval là dấu hiệu quá khớp hoặc nhiễu.
 
 ## 3. Làm quen Deep Agents
 
 1. Tác tử mặc định có các công cụ: `ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, `execute`, `task`. Công cụ `execute` cho phép chạy lệnh shell trong sandbox.
-2. Công cụ `task` dùng để khởi chạy một subagent tạm thời cho tác vụ phức tạp nhiều bước. Subagent mặc định `general-purpose` có cùng công cụ như tác tử chính, nhưng mỗi invocation là stateless: nó chỉ thấy prompt được gửi cho nó và trả về một báo cáo cuối.
-3. Một hướng dẫn từ `task`: khi prompt cho subagent cần đặt đầy đủ chi tiết và nói rõ nó phải trả về gì. Một hướng dẫn từ `execute`: ưu tiên công cụ `grep`/`glob` thay vì chạy `find` hoặc `grep` trong shell.
+2. Công cụ `task` dùng để khởi chạy một subagent tạm thời cho tác vụ phức tạp nhiều bước. Subagent chỉ thấy prompt được gửi cho nó, không tự thấy toàn bộ ngữ cảnh của tác tử chính.
+3. Một hướng dẫn từ `task`: prompt cho subagent cần đủ chi tiết và nói rõ cần trả về gì. Một hướng dẫn từ `execute`: ưu tiên công cụ `grep`/`glob` thay vì chạy `find` hoặc `grep` trong shell.
 
 ## 4. Đường cơ sở và phân loại lỗi
 
-| Tác vụ | Check thất bại | Nhóm lỗi (A-G) | Bằng chứng |
+| Tác vụ | Check thất bại | Nhóm lỗi | Bằng chứng |
 |---|---|---|---|
-| code-learn | visible_suite_passes | B. Không kiểm chứng | `2 failed, 4 passed`; run kết thúc do `GraphRecursionError` với `recursion_limit=15`. |
-| code-learn | parse_price_all_formats | D. Bỏ sót định dạng | Sai với `'$1,299.50'`, `'(12.00)'`, `'$1,000,000.00'`. |
+| code-learn | visible_suite_passes | B. Không kiểm chứng | `run.json` ghi `GraphRecursionError`; test suite chưa hoàn tất. |
+| code-learn | parse_price_all_formats | D. Bỏ sót định dạng | Sai các định dạng tiền đặc biệt như có dấu phẩy, ngoặc âm, ký hiệu tiền. |
 | code-learn | rule_type_hints | E. Vi phạm quy ước tổ chức | `RULE: every public function ... has type annotations`. |
 | code-learn | rule_regression_tests | E. Vi phạm quy ước tổ chức | `RULE: add tests/test_regressions.py ... at least 3`. |
-| code-learn | rule_changelog | E. Vi phạm quy ước tổ chức | `RULE: record each fix in CHANGELOG.md ...`. |
+| code-learn | rule_changelog | E. Vi phạm quy ước tổ chức | `RULE: record each fix in CHANGELOG.md`. |
 | data-learn | rule_money_in_cents | E. Vi phạm quy ước tổ chức | `RULE: money values in answer.json are integer cents`. |
 | data-learn | rule_meta_block | E. Vi phạm quy ước tổ chức | `RULE: answer.json has an object meta ...`. |
 | data-learn | rule_clean_csv | E. Vi phạm quy ước tổ chức | `RULE: write workspace/clean.csv ...`. |
@@ -39,73 +39,91 @@
 | logs-learn | rule_sorted_errors | E. Vi phạm quy ước tổ chức | `RULE: errors is sorted by service, then by timestamp_utc`. |
 | logs-learn | rule_schema_header | E. Vi phạm quy ước tổ chức | `RULE: top-level object has schema_version: 2 and generated_by`. |
 
-Nhận xét: nhóm E chiếm đa số trong baseline learning. `scripts/check_breakdown.py` cho baseline learning: technical `12/18`, house rules `0/9`; model xử lý được một phần logic kỹ thuật nhưng bỏ sót quy ước Acme ẩn. Skill checklist về đọc phản hồi `RULE:` và áp dụng house rules có thể phòng ngừa nhóm này.
+Baseline learning đạt technical `12/18` nhưng house rules `0/9`. Nhóm E chiếm đa số, nên lỗi chính không phải hoàn toàn do không giải được tác vụ, mà do bỏ sót quy ước tổ chức ẩn trong check.
 
 ## 5. Điều kiện `subagents`
 
-- Các subagent đã định nghĩa:
-  - `explorer`: đọc đề, README, docstring, dữ liệu mẫu và test; không sửa file.
-  - `implementer`: thực hiện thay đổi đã được khoanh vùng và chạy kiểm chứng liên quan.
-  - `reviewer`: kiểm tra độc lập kết quả theo đề, README/docstring và quy ước đầu ra.
-- `subagent_calls`: mới có `data-learn`; run này lỗi 429 trước khi model chạy nên `subagent_calls=0`, `tool_calls=0`, `tokens=0`.
-- Thông tin thiếu hoặc thừa khi giao việc: chưa đánh giá được vì run bị chặn bởi quota OpenRouter free.
-- Ảnh hưởng đến token và thời gian: chưa đủ dữ liệu; subagents chưa hoàn tất task nào.
+- Đã định nghĩa 3 subagent: `explorer`, `implementer`, `reviewer`.
+- `subagent_calls`: learning có `0, 1, 1` lần gọi tương ứng cho `code-learn`, `data-learn`, `logs-learn`; eval có `0, 1, 0`.
+- Subagent làm tăng chi phí rõ rệt: mean tokens `152,131`, cao hơn baseline `68,519`.
+- Điểm learning tăng từ `0.45` lên `0.51`, nhưng eval giảm từ `0.60` xuống `0.48`. Điều này không ủng hộ H1 trên eval; chi phí tăng không đổi lấy hiệu quả ổn định.
 
 ## 6. Self-evolving: skill do curator sinh
 
-- Số lần chạy curator, số skill bị xóa và lý do: chưa chạy được vì OpenRouter free tier hết quota trước Phần 3. Curator cần một lần gọi model thật.
+Curator sinh 3 skill hợp lệ trong `skills/auto/`:
 
-| Skill | Tổng quát hay riêng cho tác vụ học? | Đúng hay sai | Độ dài, `description` và `skills_read` |
+| Skill | Tổng quát hay riêng? | Đúng hay sai | Độ dài, description, `skills_read` |
 |---|---|---|---|
-| Chưa sinh | Chưa đánh giá | Chưa đánh giá | Cần chạy `python -m lab.curator` sau khi quota/API khả dụng |
+| `syntax-and-lint-check` | Tổng quát cho code/data script | Đúng nhưng khá chung | Ngắn; description hợp lý; `skills_read=0/6`. |
+| `verify-output-constraints` | Tổng quát cho JSON/CSV và quy ước output | Đúng, khớp lỗi house rules | Ngắn; description đúng tình huống; `skills_read=0/6`. |
+| `regression-and-changelog-management` | Hơi nghiêng về code task | Đúng cho code, ít hữu ích cho data/logs | Ngắn; description hợp lý; `skills_read=0/6`. |
+
+Các skill không chứa dữ liệu eval và `verify_freeze.py` báo OK. Tuy nhiên agent không đọc skill nào trong 6 lần `skills-auto`, nên H2 không được kiểm chứng theo cơ chế mong muốn. Điểm `skills-auto` tương đương baseline trên eval chủ yếu là do hành vi model trong run, không phải bằng chứng skill được áp dụng.
 
 ## 7. Kết quả so sánh
 
 ```text
-| Task | baseline | subagents |
-|---|---|---|
-| code-learn | 1/10 | - |
-| data-learn | 5/8 | 0/8 |
-| logs-learn | 6/9 | - |
-| **Mean score - learning tasks** | 0.46 | 0.00 |
-| **Mean score - evaluation tasks** | - | - |
-| **Mean tokens per run** | 38,177 | 0 |
-| **Runs that read a skill** | 0/3 | 0/1 |
+| Task | baseline | subagents | skills-auto |
+|---|---|---|---|
+| code-learn | 3/10 | 5/10 | 5/10 |
+| data-learn | 3/8 | 3/8 | 3/8 |
+| logs-learn | 6/9 | 6/9 | 6/9 |
+| code-eval | 7/11 | 3/11 | 7/11 |
+| data-eval | 5/9 | 5/9 | 5/9 |
+| logs-eval | 6/10 | 6/10 | 6/10 |
+| **Mean score - learning tasks** | 0.45 | 0.51 | 0.51 |
+| **Mean score - evaluation tasks** | 0.60 | 0.48 | 0.60 |
+| **Mean tokens per run** | 68,519 | 152,131 | 68,452 |
+| **Runs that read a skill** | 0/6 | 0/6 | 0/6 |
+```
 
-check_breakdown.py:
+`check_breakdown.py`:
+
+```text
 condition     role    technical  house rules  mean tokens  read a skill
-baseline      learn    12/18         0/9           38,177      0/3
-subagents     learn     0/5          0/3                0      0/1
-(evaluation rows are hidden until the git tag `freeze` exists)
+baseline      eval     18/18         0/12          63,391      0/3
+baseline      learn    12/18         0/9           73,646      0/3
+subagents     eval     14/18         0/12         102,633      0/3
+subagents     learn    14/18         0/9          201,630      0/3
+skills-auto   eval     18/18         0/12          68,645      0/3
+skills-auto   learn    14/18         0/9           68,259      0/3
 ```
 
 ## 8. Phân tích
 
-Số liệu hiện chỉ đủ cho baseline learning và một run subagents bị quota. Baseline đạt trung bình 0.46 trên learning tasks; check kỹ thuật đạt 12/18 nhưng house rules đạt 0/9. Điều này ủng hộ giả thuyết rằng lỗi chính là bỏ sót quy ước tổ chức, không phải hoàn toàn không xử lý được tác vụ.
+Baseline xử lý tốt các check kỹ thuật trên eval (`18/18`) nhưng không đạt check quy ước (`0/12`). Đây là bằng chứng mạnh rằng tác tử không tự suy ra house rules, dù logic chính vẫn làm được.
 
-Chưa thể kết luận về `subagents` hoặc `skills-auto`: `subagents/data-learn` bị `OpenAIRateLimitError 429`, còn curator và eval chưa chạy được.
+Subagents tăng điểm learning ở code task (`3/10` lên `5/10`) nhưng giảm mạnh code eval (`7/11` xuống `3/11`). Các trace cho thấy subagent không được gọi trong code tasks, trong khi data/logs có gọi subagent nhưng không cải thiện house rules. Chi phí token tăng nhiều, đặc biệt `data-learn` dùng `357,272` token.
+
+Skills-auto có learning mean `0.51` và eval mean `0.60`, bằng baseline trên eval. Vì `skills_read=0/6`, không thể kết luận skill tự sinh giúp cải thiện. Cơ chế thất bại có khả năng nằm ở description/kích hoạt skill hoặc tương thích tool-call của model: agent có thư mục skill nhưng không đọc file `SKILL.md`.
+
+Không thấy dấu hiệu overfitting do skill, vì skill không được dùng. Chênh lệch learning/eval của `skills-auto` (`0.51` so với `0.60`) phản ánh nhiễu và độ khó khác nhau giữa task, không phải lợi ích học từ learning set.
 
 ## 9. Hạn chế và tính hợp lệ
 
-1. Chỉ mới có một phần kết quả vì OpenRouter free tier hết quota ngày trong lúc chạy, nên kết luận chỉ áp dụng cho baseline learning.
-2. Thí nghiệm chính của lab chỉ có 3 tác vụ học và 3 tác vụ đánh giá, nên kết luận sau này vẫn có độ bất định cao.
-3. Mỗi điều kiện dự kiến chỉ chạy một lần, vì vậy kết quả chịu nhiễu từ mô hình và trạng thái API.
+1. Chỉ có 6 task, nên kết luận có độ bất định cao.
+2. Mỗi condition chỉ chạy một lần; model có nhiễu và một số run chạm `GraphRecursionError`.
+3. Model Gemini qua LangChain Google có warning về automatic function calling; điều này có thể ảnh hưởng cách trace/tool calls được ghi.
+4. `skills_read=0/6`, nên phần self-evolving chỉ đánh giá được việc curator sinh skill và quy trình freeze, chưa đánh giá được lợi ích thực tế của skill.
+5. Tất cả run dùng một model duy nhất, không đủ để kết luận về Deep Agents nói chung.
 
 ## 10. Kết luận
 
-Phần harness đã được cài đặt và kiểm thử offline. Kết quả baseline học cho thấy lỗi quy ước Acme là nguồn thất bại chính. Cần quota OpenRouter mới hoặc model trả phí/khác để chạy curator, freeze, eval và hoàn tất kết luận chính thức.
+Harness đã hoàn thiện và pass toàn bộ test offline. Pipeline thí nghiệm đã chạy đủ 3 condition, 6 task, có skill tự sinh, có tag `freeze`, và `verify_freeze.py` báo OK. Kết quả chính: baseline và skills-auto ngang nhau trên eval (`0.60`), subagents tốn token hơn và kém hơn trên eval (`0.48`). Lỗi còn lại chủ yếu là house rules (`0/12` eval ở cả 3 condition).
 
 ## Phụ lục
 
-- Lệnh đã chạy:
-  - `venv/bin/python -m pip install -e .`
-  - `venv/bin/python -m pytest tests/test_01_provided.py tests/test_02_agent.py tests/test_03_runner.py tests/test_04_curator.py`
-  - `venv/bin/python scripts/tour.py`
-  - `venv/bin/python -m lab.runner --condition baseline --tasks data-learn --recursion-limit 20`
-  - `venv/bin/python -m lab.runner --condition baseline --tasks logs-learn --recursion-limit 20`
-  - `venv/bin/python -m lab.runner --condition baseline --tasks code-learn --recursion-limit 15`
-  - `venv/bin/python -m lab.runner --condition subagents --tasks data-learn --recursion-limit 10`
+- Lệnh chính đã chạy:
+  - `venv/bin/python -m pytest -q`
+  - `venv/bin/python -m lab.runner --condition baseline --tasks learn --recursion-limit 30`
+  - `venv/bin/python -m lab.runner --condition subagents --tasks learn --recursion-limit 30`
+  - `venv/bin/python -m lab.curator`
+  - `git commit -m "hypotheses"`
+  - `git commit --allow-empty -m "freeze skills" && git tag freeze`
+  - `venv/bin/python -m lab.runner --condition baseline --tasks eval --recursion-limit 30`
+  - `venv/bin/python -m lab.runner --condition subagents --tasks eval --recursion-limit 30`
+  - `venv/bin/python -m lab.runner --condition skills-auto --tasks all --recursion-limit 30`
+  - `venv/bin/python scripts/verify_freeze.py`
   - `venv/bin/python -m lab.compare > report/table.md`
   - `venv/bin/python scripts/check_breakdown.py`
 - Thử thách mở rộng: chưa thực hiện.
-- Ghi chú khác: `.env` đã chuyển sang OpenRouter Muse Spark 1.3 (`meta/muse-spark-1.3`).
